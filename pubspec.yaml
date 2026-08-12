@@ -1,0 +1,32 @@
+name: mp3splitter
+description: "MP3 Splitter — split an mp3 by ear and export clean new mp3s, losslessly."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.13.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  just_audio: 0.10.6
+  audio_decoder: 0.8.1
+  # Pinned, not ^-ranged: 11.0.0-11.0.3 regressed their Android build (omits
+  # the Kotlin Android plugin, breaking under AGP 9 — "cannot find symbol
+  # FilePickerPlugin" at compile time). 10.3.10 is the confirmed-working
+  # version per https://github.com/miguelpruivo/flutter_file_picker/issues/1973.
+  file_picker: 10.3.10
+  share_plus: ^12.0.2
+  path_provider: ^2.1.4
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
