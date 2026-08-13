@@ -48,6 +48,26 @@ class _EditorScreenState extends State<EditorScreen> {
   /// waveform rather than hang the loading screen indefinitely.
   static const _waveformExtractionTimeout = Duration(seconds: 20);
 
+  /// Above this track length, native waveform extraction is skipped
+  /// entirely rather than attempted and caught. `audio_decoder`'s Android
+  /// implementation appears to decode the *whole* file to raw PCM before
+  /// computing amplitude peaks — for a long track that's plausibly hundreds
+  /// of megabytes, risking an out-of-memory kill deep in native code. That
+  /// kind of failure happens before any Dart handler — try/catch, timeout,
+  /// even `runZonedGuarded` in main.dart — gets a chance to run, so it can't
+  /// be caught, only avoided. 10 minutes is a conservative guess, not a
+  /// measured limit (no crash log exists yet to measure the real one from);
+  /// the editor still works fully from playback and the cut list alone
+  /// without a waveform.
+  static const _maxWaveformDecodeMillis = 10 * 60 * 1000;
+
+  /// A sanity ceiling on the source file itself, checked before anything
+  /// else is attempted. Well beyond any real mp3 (even several hours at a
+  /// high bitrate stays under this) — this exists to turn "picked the wrong
+  /// file" or a corrupt/oversized file into a clear error message instead
+  /// of an open-ended read + parse of an arbitrarily large file.
+  static const _maxFileSizeBytes = 500 * 1024 * 1024;
+
   ParsedMp3? _parsed;
   CutTimeline? _timeline;
   List<double> _amplitudes = const [];
@@ -76,24 +96,41 @@ class _EditorScreenState extends State<EditorScreen> {
 
   Future<void> _load() async {
     try {
-      final bytes = await File(widget.filePath).readAsBytes();
+      final file = File(widget.filePath);
+      final sizeBytes = await file.length();
+      if (sizeBytes > _maxFileSizeBytes) {
+        final sizeMb = (sizeBytes / (1024 * 1024)).round();
+        throw Mp3ParseException(
+          "This file is $sizeMb MB, too large to open. Try a smaller file.",
+        );
+      }
+
+      final bytes = await file.readAsBytes();
       // Frame-walking a large file is real work; keep it off the UI thread.
       final parsed = await compute(parseMp3, bytes);
 
       await _player.setFilePath(widget.filePath);
 
+      final tooLongForWaveform =
+          parsed.totalMillis > _maxWaveformDecodeMillis;
       var amplitudes = const <double>[];
-      try {
-        amplitudes = await AudioDecoder.getWaveform(
-          widget.filePath,
-          numberOfSamples: 2400,
-        ).timeout(_waveformExtractionTimeout, onTimeout: () => const <double>[]);
-      } catch (_) {
-        // The waveform is a visual aid, not a requirement — the editor still
-        // works from playback and the cut list alone without it. (A timeout
-        // only unblocks the Dart side — it can't cancel whatever the native
-        // decoder is doing, and neither this nor the catch above can help if
-        // the native side crashes outright rather than throwing.)
+      if (!tooLongForWaveform) {
+        try {
+          amplitudes = await AudioDecoder.getWaveform(
+            widget.filePath,
+            numberOfSamples: 2400,
+          ).timeout(
+            _waveformExtractionTimeout,
+            onTimeout: () => const <double>[],
+          );
+        } catch (_) {
+          // The waveform is a visual aid, not a requirement — the editor
+          // still works from playback and the cut list alone without it. (A
+          // timeout only unblocks the Dart side — it can't cancel whatever
+          // the native decoder is doing, and neither this nor the catch
+          // above can help if the native side crashes outright rather than
+          // throwing.)
+        }
       }
 
       if (!mounted) return;
@@ -103,6 +140,18 @@ class _EditorScreenState extends State<EditorScreen> {
         _amplitudes = amplitudes;
         _isLoading = false;
       });
+
+      if (tooLongForWaveform) {
+        // Deferred a frame: the Scaffold this needs is the one about to be
+        // built from the setState above, not necessarily present yet.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          _showMessage(
+            "Track is long, so there's no waveform preview — playback and "
+            'cutting still work normally.',
+          );
+        });
+      }
 
       _positionSub = _player.positionStream.listen(_onPlaybackPosition);
     } on Mp3ParseException catch (e) {
