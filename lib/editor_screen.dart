@@ -42,6 +42,12 @@ class _EditorScreenState extends State<EditorScreen> {
   /// drag misses are rare without making every scroll near a cut feel sticky.
   static const double _cutHitToleranceMillis = 350;
 
+  /// A generous upper bound on how long native waveform extraction should
+  /// take, even for a long track — if it hasn't returned by then, something
+  /// is stuck rather than just slow, and the editor should fall back to no
+  /// waveform rather than hang the loading screen indefinitely.
+  static const _waveformExtractionTimeout = Duration(seconds: 20);
+
   ParsedMp3? _parsed;
   CutTimeline? _timeline;
   List<double> _amplitudes = const [];
@@ -81,10 +87,13 @@ class _EditorScreenState extends State<EditorScreen> {
         amplitudes = await AudioDecoder.getWaveform(
           widget.filePath,
           numberOfSamples: 2400,
-        );
+        ).timeout(_waveformExtractionTimeout, onTimeout: () => const <double>[]);
       } catch (_) {
         // The waveform is a visual aid, not a requirement — the editor still
-        // works from playback and the cut list alone without it.
+        // works from playback and the cut list alone without it. (A timeout
+        // only unblocks the Dart side — it can't cancel whatever the native
+        // decoder is doing, and neither this nor the catch above can help if
+        // the native side crashes outright rather than throwing.)
       }
 
       if (!mounted) return;
@@ -114,9 +123,9 @@ class _EditorScreenState extends State<EditorScreen> {
   WaveformGeometry? get _geometry {
     final timeline = _timeline;
     if (timeline == null || _viewportWidth <= 0) return null;
-    return WaveformGeometry(
+    return WaveformGeometry.forTrack(
       trackMillis: timeline.trackMillis,
-      pixelsPerSecond: _pixelsPerSecond,
+      basePixelsPerSecond: _pixelsPerSecond,
       viewportWidth: _viewportWidth,
     );
   }
@@ -320,9 +329,9 @@ class _EditorScreenState extends State<EditorScreen> {
             child: LayoutBuilder(
               builder: (context, constraints) {
                 _viewportWidth = constraints.maxWidth;
-                final geometry = WaveformGeometry(
+                final geometry = WaveformGeometry.forTrack(
                   trackMillis: timeline.trackMillis,
-                  pixelsPerSecond: _pixelsPerSecond,
+                  basePixelsPerSecond: _pixelsPerSecond,
                   viewportWidth: _viewportWidth,
                 );
 

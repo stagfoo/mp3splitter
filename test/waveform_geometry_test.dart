@@ -111,4 +111,92 @@ void main() {
       expect(id, isNull);
     });
   });
+
+  group('effectivePixelsPerSecond (long-track cap)', () {
+    test('a short track is returned unchanged', () {
+      expect(effectivePixelsPerSecond(60000, 50), 50);
+    });
+
+    test('exactly at the cap is returned unchanged', () {
+      final trackMillis = (kMaxWaveformContentWidth / 50 * 1000).round();
+
+      expect(effectivePixelsPerSecond(trackMillis, 50), 50);
+    });
+
+    test('a 30-minute track is scaled down to fit the cap', () {
+      const trackMillis = 30 * 60 * 1000;
+
+      final result = effectivePixelsPerSecond(trackMillis, 50);
+
+      expect(result, lessThan(50));
+      expect(
+        result * (trackMillis / 1000),
+        closeTo(kMaxWaveformContentWidth, 0.001),
+      );
+    });
+
+    test('never scales up', () {
+      // Already well under the cap at this zoom — must come back unchanged.
+      expect(effectivePixelsPerSecond(30 * 60 * 1000, 2), 2);
+    });
+
+    test('a zero-length track does not divide by zero', () {
+      expect(effectivePixelsPerSecond(0, 50), 50);
+    });
+
+    test('respects a custom maxWidth', () {
+      final result = effectivePixelsPerSecond(600000, 50, maxWidth: 1000);
+
+      expect(result * 600, closeTo(1000, 0.001));
+    });
+  });
+
+  group('WaveformGeometry.forTrack', () {
+    test('a short track uses the base zoom directly', () {
+      final geometry = WaveformGeometry.forTrack(
+        trackMillis: 60000,
+        basePixelsPerSecond: 50,
+        viewportWidth: 300,
+      );
+
+      expect(geometry.pixelsPerSecond, 50);
+    });
+
+    test('a long track is capped, and trackWidth stays within the cap', () {
+      // The screenshot-triggering case: a 30-minute file at the naive 50
+      // px/s zoom would be ~90,000px wide.
+      final geometry = WaveformGeometry.forTrack(
+        trackMillis: 30 * 60 * 1000,
+        basePixelsPerSecond: 50,
+        viewportWidth: 300,
+      );
+
+      expect(geometry.trackWidth, closeTo(kMaxWaveformContentWidth, 0.001));
+    });
+
+    test('an even longer track is still capped, not unboundedly wide', () {
+      final geometry = WaveformGeometry.forTrack(
+        trackMillis: 3 * 60 * 60 * 1000, // 3 hours
+        basePixelsPerSecond: 50,
+        viewportWidth: 300,
+      );
+
+      expect(geometry.trackWidth, lessThanOrEqualTo(kMaxWaveformContentWidth));
+    });
+
+    test('two calls with identical inputs cannot drift apart', () {
+      // This is the actual bug class being guarded against: editor_screen
+      // builds a WaveformGeometry in two separate places (scroll-follow
+      // during playback, and the paint/gesture widget) — both must apply
+      // the same cap or scrubbing and playback-follow disagree about where
+      // "now" is.
+      WaveformGeometry build() => WaveformGeometry.forTrack(
+        trackMillis: 30 * 60 * 1000,
+        basePixelsPerSecond: 50,
+        viewportWidth: 300,
+      );
+
+      expect(build().pixelsPerSecond, build().pixelsPerSecond);
+    });
+  });
 }

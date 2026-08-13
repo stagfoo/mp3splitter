@@ -1,6 +1,8 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 
+import 'crash_log_file.dart';
 import 'editor_screen.dart';
 
 /// The only other screen: pick an mp3, then go straight to editing it.
@@ -24,12 +26,37 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
+  /// Shares the on-device crash log, if a crash has ever been recorded.
+  /// Checked at tap time rather than pre-computed into an enabled/disabled
+  /// button state — simpler, and avoids that state going stale if a crash
+  /// is logged without a full app relaunch.
+  Future<void> _shareCrashLog(BuildContext context) async {
+    final file = await crashLogFile();
+    if (!await file.exists()) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No crashes recorded yet.')),
+      );
+      return;
+    }
+    await SharePlus.instance.share(ShareParams(files: [XFile(file.path)]));
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('MP3 Splitter')),
+      appBar: AppBar(
+        title: const Text('MP3 Splitter'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.bug_report_outlined),
+            tooltip: 'Share crash log',
+            onPressed: () => _shareCrashLog(context),
+          ),
+        ],
+      ),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
