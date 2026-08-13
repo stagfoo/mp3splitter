@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:audio_decoder/audio_decoder.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
@@ -42,25 +41,6 @@ class _EditorScreenState extends State<EditorScreen> {
   /// drag misses are rare without making every scroll near a cut feel sticky.
   static const double _cutHitToleranceMillis = 350;
 
-  /// A generous upper bound on how long native waveform extraction should
-  /// take, even for a long track — if it hasn't returned by then, something
-  /// is stuck rather than just slow, and the editor should fall back to no
-  /// waveform rather than hang the loading screen indefinitely.
-  static const _waveformExtractionTimeout = Duration(seconds: 20);
-
-  /// Above this track length, native waveform extraction is skipped
-  /// entirely rather than attempted and caught. `audio_decoder`'s Android
-  /// implementation appears to decode the *whole* file to raw PCM before
-  /// computing amplitude peaks — for a long track that's plausibly hundreds
-  /// of megabytes, risking an out-of-memory kill deep in native code. That
-  /// kind of failure happens before any Dart handler — try/catch, timeout,
-  /// even `runZonedGuarded` in main.dart — gets a chance to run, so it can't
-  /// be caught, only avoided. 10 minutes is a conservative guess, not a
-  /// measured limit (no crash log exists yet to measure the real one from);
-  /// the editor still works fully from playback and the cut list alone
-  /// without a waveform.
-  static const _maxWaveformDecodeMillis = 10 * 60 * 1000;
-
   /// A sanity ceiling on the source file itself, checked before anything
   /// else is attempted. Well beyond any real mp3 (even several hours at a
   /// high bitrate stays under this) — this exists to turn "picked the wrong
@@ -70,7 +50,6 @@ class _EditorScreenState extends State<EditorScreen> {
 
   ParsedMp3? _parsed;
   CutTimeline? _timeline;
-  List<double> _amplitudes = const [];
   String? _selectedCutId;
   bool _isLoading = true;
   String? _error;
@@ -111,47 +90,12 @@ class _EditorScreenState extends State<EditorScreen> {
 
       await _player.setFilePath(widget.filePath);
 
-      final tooLongForWaveform =
-          parsed.totalMillis > _maxWaveformDecodeMillis;
-      var amplitudes = const <double>[];
-      if (!tooLongForWaveform) {
-        try {
-          amplitudes = await AudioDecoder.getWaveform(
-            widget.filePath,
-            numberOfSamples: 2400,
-          ).timeout(
-            _waveformExtractionTimeout,
-            onTimeout: () => const <double>[],
-          );
-        } catch (_) {
-          // The waveform is a visual aid, not a requirement — the editor
-          // still works from playback and the cut list alone without it. (A
-          // timeout only unblocks the Dart side — it can't cancel whatever
-          // the native decoder is doing, and neither this nor the catch
-          // above can help if the native side crashes outright rather than
-          // throwing.)
-        }
-      }
-
       if (!mounted) return;
       setState(() {
         _parsed = parsed;
         _timeline = CutTimeline(trackMillis: parsed.totalMillis.round());
-        _amplitudes = amplitudes;
         _isLoading = false;
       });
-
-      if (tooLongForWaveform) {
-        // Deferred a frame: the Scaffold this needs is the one about to be
-        // built from the setState above, not necessarily present yet.
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          _showMessage(
-            "Track is long, so there's no waveform preview — playback and "
-            'cutting still work normally.',
-          );
-        });
-      }
 
       _positionSub = _player.positionStream.listen(_onPlaybackPosition);
     } on Mp3ParseException catch (e) {
@@ -403,7 +347,7 @@ class _EditorScreenState extends State<EditorScreen> {
                           child: CustomPaint(
                             painter: WaveformPainter(
                               geometry: geometry,
-                              amplitudes: _amplitudes,
+                              amplitudes: const [],
                               cutsById: {
                                 for (final c in timeline.cuts) c.id: c.millis,
                               },

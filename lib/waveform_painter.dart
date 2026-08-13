@@ -36,9 +36,27 @@ class WaveformPainter extends CustomPainter {
   }
 
   void _paintBars(Canvas canvas, Size size) {
-    if (amplitudes.isEmpty || geometry.trackWidth <= 0) return;
+    if (geometry.trackWidth <= 0) return;
 
     final paint = Paint()..color = barColor;
+
+    if (amplitudes.isEmpty) {
+      // No amplitude data (extraction skipped, failed, or not attempted) —
+      // a flat bar still gives the track a visible strip to scrub and drop
+      // cuts on, rather than an empty gap.
+      final barHeight = size.height * 0.5;
+      canvas.drawRect(
+        Rect.fromLTWH(
+          geometry.halfViewport,
+          (size.height - barHeight) / 2,
+          geometry.trackWidth,
+          barHeight,
+        ),
+        paint,
+      );
+      return;
+    }
+
     final barGap = geometry.trackWidth / amplitudes.length;
     // Leave a sliver of gap between bars once they're wide enough for it to
     // read as bars rather than a solid block; below that, drawing them
