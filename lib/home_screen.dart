@@ -4,6 +4,7 @@ import 'package:share_plus/share_plus.dart';
 
 import 'crash_log_file.dart';
 import 'editor_screen.dart';
+import 'video_extract_screen.dart';
 
 /// The only other screen: pick an mp3, then go straight to editing it.
 /// Nothing here persists between launches — each session is one file, start
@@ -22,6 +23,18 @@ class HomeScreen extends StatelessWidget {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (context) => EditorScreen(filePath: path),
+      ),
+    );
+  }
+
+  Future<void> _pickVideo(BuildContext context) async {
+    final result = await FilePicker.platform.pickFiles(type: FileType.video);
+    final path = result?.files.single.path;
+    if (path == null || !context.mounted) return;
+
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => VideoExtractScreen(videoPath: path),
       ),
     );
   }
@@ -89,6 +102,12 @@ class HomeScreen extends StatelessWidget {
                 onPressed: () => _pickFile(context),
                 icon: const Icon(Icons.folder_open),
                 label: const Text('Pick an MP3'),
+              ),
+              const SizedBox(height: 12),
+              TextButton.icon(
+                onPressed: () => _pickVideo(context),
+                icon: const Icon(Icons.movie_creation_outlined),
+                label: const Text('Extract audio from a video'),
               ),
             ],
           ),

@@ -20,6 +20,11 @@ dependencies:
   file_picker: 10.3.10
   share_plus: ^12.0.2
   path_provider: ^2.1.4
+  # The "audio" build variant, not the default full-GPL package: it's
+  # audio-codecs-only (includes libmp3lame, which is all extraction needs)
+  # so it skips the GPL video codecs (x264/x265/etc) and video/subtitle
+  # libraries entirely — smaller, and not GPL-licensed.
+  ffmpeg_kit_flutter_new_audio: ^2.5.2
 
 dev_dependencies:
   flutter_test:

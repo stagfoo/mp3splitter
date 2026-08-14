@@ -25,11 +25,14 @@ jobs:
         run: flutter test
 
       - name: Build debug APK
-        run: flutter build apk --debug
+        # arm64-only: ffmpeg_kit_flutter_new_audio bundles native libraries
+        # for every ABI, which balloons a universal build to 200MB+.
+        # arm64-v8a covers every real Android phone from the last ~8 years.
+        run: flutter build apk --debug --target-platform android-arm64 --split-per-abi
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v7
         with:
           name: mp3splitter-debug-apk
-          path: build/app/outputs/flutter-apk/app-debug.apk
+          path: build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk
           retention-days: 14
