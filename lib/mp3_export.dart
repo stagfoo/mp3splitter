@@ -11,12 +11,21 @@ class ExportedFile {
   const ExportedFile({
     required this.file,
     required this.result,
-  });
+    int? sizeBytes,
+  }) : _sizeBytesOverride = sizeBytes;
 
   final File file;
   final Mp3SplitResult result;
 
-  int get sizeBytes => result.bytes.length;
+  /// The on-disk size, if it's been re-encoded (e.g. by a speed change)
+  /// since the original byte-copy split — that changes the file's actual
+  /// length, so [result.bytes] is no longer an accurate size to report.
+  final int? _sizeBytesOverride;
+
+  int get sizeBytes => _sizeBytesOverride ?? result.bytes.length;
+
+  ExportedFile withSizeBytes(int sizeBytes) =>
+      ExportedFile(file: file, result: result, sizeBytes: sizeBytes);
 }
 
 /// The message bundled for [_splitInIsolate] — [compute] takes exactly one
