@@ -24,15 +24,19 @@ jobs:
       - name: Test
         run: flutter test
 
-      - name: Build debug APK
+      - name: Build release APK
+        # Release, not debug — the same thing scripts/release.sh publishes, so a
+        # CI artifact and a local release are interchangeable and install over
+        # each other. Signed with the committed debug.keystore either way.
+        #
         # arm64-only: ffmpeg_kit_flutter_new_audio bundles native libraries
         # for every ABI, which balloons a universal build to 200MB+.
         # arm64-v8a covers every real Android phone from the last ~8 years.
-        run: flutter build apk --debug --target-platform android-arm64 --split-per-abi
+        run: flutter build apk --release --target-platform android-arm64 --split-per-abi
 
-      - name: Upload debug APK
+      - name: Upload release APK
         uses: actions/upload-artifact@v7
         with:
-          name: mp3splitter-debug-apk
-          path: build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk
+          name: mp3splitter-release-apk
+          path: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
           retention-days: 14

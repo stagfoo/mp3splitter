@@ -2,7 +2,7 @@ name: mp3splitter
 description: "MP3 Splitter — split an mp3 by ear and export clean new mp3s, losslessly."
 publish_to: 'none'
 
-version: 1.0.0+1
+version: 1.0.1+2
 
 environment:
   sdk: ^3.13.0
